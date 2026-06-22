@@ -3,43 +3,13 @@ package main
 
 import (
 	"context"
+	"go-tiny-claw/internal/tools"
 	"log"
 	"os"
 
 	"go-tiny-claw/internal/engine"
 	"go-tiny-claw/internal/provider"
-	"go-tiny-claw/internal/schema"
 )
-
-// 伪造的工具注册表 (用于测试 Provider 的工具提取能力)
-type mockRegistry struct{}
-
-func (m *mockRegistry) GetAvailableTools() []schema.ToolDefinition {
-	return []schema.ToolDefinition{
-		{
-			Name:        "get_weather",
-			Description: "获取指定城市的当前天气情况。",
-			InputSchema: map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"city": map[string]interface{}{
-						"type": "string",
-					},
-				},
-				"required": []string{"city"},
-			},
-		},
-	}
-}
-
-func (m *mockRegistry) Execute(ctx context.Context, call schema.ToolCall) schema.ToolResult {
-	log.Printf("  -> [Mock 工具执行] 获取 %s 的天气中...\n", call.Name)
-	return schema.ToolResult{
-		ToolCallID: call.ID,
-		Output:     "API 返回：今天是晴天，气温 25 度。",
-		IsError:    false,
-	}
-}
 
 func main() {
 	// 确保已设置 ZHIPU_API_KEY
@@ -49,18 +19,24 @@ func main() {
 
 	workDir, _ := os.Getwd()
 
-	// 1. 初始化真实的 Provider大脑 (指向智谱 GLM-4.5)
+	// 1. 初始化真实的 Provider大脑
 	// 这里你可以任意切换 NewDouaoClaudeProvider 或 NewZhipuOpenAIProvider，效果完全一致！
 	llmProvider := provider.NewDouaoClaudeProvider("doubao-seed-code-preview-latest")
 
-	// 2. 注入伪造的工具注册表
-	registry := &mockRegistry{}
+	// 3. 初始化真实的 Tool Registry
+	registry := tools.NewRegistry()
 
-	// 3. 实例化并运行引擎，开启 EnableThinking = true (开启慢思考阶段！)
-	eng := engine.NewAgentEngine(llmProvider, registry, workDir, true)
+	// 4. 将真实的 ReadFile 工具挂载到注册表中
 
-	// 设定测试任务
-	prompt := "我想去北京跑步，帮我查查天气适合吗？"
+	readFileTool := tools.NewReadFileTool(workDir)
+
+	registry.Register(readFileTool)
+
+	// 5. 实例化并运行引擎，开启 EnableThinking = true (开启慢思考阶段！)
+	eng := engine.NewAgentEngine(llmProvider, registry, workDir, false)
+
+	// 6. 下发一个必须通过真实工具才能完成的任务
+	prompt := "请调用工具读取一下当前工作区目录下 hello.txt 文件的内容，并用一句话向我总结它说了什么。"
 
 	err := eng.Run(context.Background(), prompt)
 	if err != nil {
