@@ -1,48 +1,61 @@
-// cmd/claw/main.go
 package main
 
 import (
 	"context"
-	"go-tiny-claw/internal/tools"
+	"fmt"
 	"log"
 	"os"
 
 	"go-tiny-claw/internal/engine"
 	"go-tiny-claw/internal/provider"
+	"go-tiny-claw/internal/tools"
+)
+
+const (
+	// 任务描述常量
+	taskPrompt = `请修改当前目录下的 internal/example/server_example.go 文件，
+将 "TODO: 增加鉴权逻辑" 下面的 if 语句替换为：
+if user == nil {
+    fmt.Println("Forbidden!")
+    return
+}`
 )
 
 func main() {
-	// 确保已设置 ZHIPU_API_KEY
-	if os.Getenv("ZHIPU_API_KEY") == "" {
-		log.Fatal("请先导出 ZHIPU_API_KEY 环境变量")
+	// 检查必要的环境变量
+	if err := checkRequiredEnvVars(); err != nil {
+		log.Fatal(err)
 	}
 
-	workDir, _ := os.Getwd()
+	// 获取工作目录
+	workDir, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("无法获取当前工作目录: %v", err)
+	}
 
-	// 1. 初始化真实的 Provider大脑
-	// 这里你可以任意切换 NewDouaoClaudeProvider 或 NewZhipuOpenAIProvider，效果完全一致！
+	// 初始化 LLM 提供者
 	llmProvider := provider.NewDouaoClaudeProvider("doubao-seed-code-preview-latest")
 
-	// 3. 初始化真实的 Tool Registry
+	// 初始化工具注册表并注册工具
 	registry := tools.NewRegistry()
-
-	// 4. 将真实的 ReadFile 工具挂载到注册表中
-
 	registry.Register(tools.NewReadFileTool(workDir))
 	registry.Register(tools.NewWriteFileTool(workDir))
 	registry.Register(tools.NewBashTool(workDir))
+	registry.Register(tools.NewEditFileTool(workDir))
 
-	// 5. 实例化并运行引擎，开启 EnableThinking = true (开启慢思考阶段！)
+	// 实例化并运行引擎
 	eng := engine.NewAgentEngine(llmProvider, registry, workDir, false)
 
-	// 6. 下发一个必须通过真实工具才能完成的任务
-	// 发起一个需要连贯物理动作的任务
-	prompt := ` 请帮我执行以下操作： 
-1. 用 bash 查看一下我当前电脑的 Go 版本。
-2. 帮我写一个简单的 helloworld.go 文件，输出 "Hello, go-tiny-claw!"。
-3. 用 bash 编译并运行这个 go 文件，确认它能正常工作。 `
-	err := eng.Run(context.Background(), prompt)
-	if err != nil {
+	// 执行任务
+	if err := eng.Run(context.Background(), taskPrompt); err != nil {
 		log.Fatalf("引擎运行崩溃: %v", err)
 	}
+}
+
+// 检查必要的环境变量
+func checkRequiredEnvVars() error {
+	if os.Getenv("ZHIPU_API_KEY") == "" {
+		return fmt.Errorf("请先导出 ZHIPU_API_KEY 环境变量")
+	}
+	return nil
 }
