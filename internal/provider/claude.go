@@ -30,7 +30,7 @@ func NewDouaoClaudeProvider(model string) *ClaudeProvider {
 	}
 }
 
-func (p *ClaudeProvider) Generate(ctx context.Context, msgs []schema.Message, availableTools []schema.ToolDefinition) (*schema.Message, error) {
+func (p *ClaudeProvider) Generate(ctx context.Context, msgs []schema.Message, availableTools []schema.ToolDefinition, options GenerateOptions) (*schema.Message, error) {
 	var anthropicMsgs []anthropic.MessageParam
 	var systemPrompt string
 
@@ -103,7 +103,7 @@ func (p *ClaudeProvider) Generate(ctx context.Context, msgs []schema.Message, av
 	// 3. 构建请求并发送
 	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(p.model),
-		MaxTokens: 4096,
+		MaxTokens: normalizedMaxTokens(options),
 		Messages:  anthropicMsgs,
 	}
 

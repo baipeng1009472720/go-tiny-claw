@@ -34,7 +34,7 @@ func NewZhipuOpenAIProvider(model string) *OpenAIProvider {
 	}
 }
 
-func (p *OpenAIProvider) Generate(ctx context.Context, msgs []schema.Message, availableTools []schema.ToolDefinition) (*schema.Message, error) {
+func (p *OpenAIProvider) Generate(ctx context.Context, msgs []schema.Message, availableTools []schema.ToolDefinition, options GenerateOptions) (*schema.Message, error) {
 	var openaiMsgs []openai.ChatCompletionMessageParamUnion
 
 	// 1. 翻译上下文消息
@@ -110,8 +110,9 @@ func (p *OpenAIProvider) Generate(ctx context.Context, msgs []schema.Message, av
 
 	// 3. 构建请求并发送
 	params := openai.ChatCompletionNewParams{
-		Model:    p.model,
-		Messages: openaiMsgs,
+		Model:     p.model,
+		Messages:  openaiMsgs,
+		MaxTokens: openai.Int(normalizedMaxTokens(options)),
 	}
 
 	// 【慢思考机制支撑】仅当 availableTools 存在时才挂载 Tools

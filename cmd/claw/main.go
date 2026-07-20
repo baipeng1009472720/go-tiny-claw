@@ -2,23 +2,17 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
+	slackchannel "go-tiny-claw/internal/channel/slack"
 	"go-tiny-claw/internal/engine"
 	"go-tiny-claw/internal/provider"
 	"go-tiny-claw/internal/tools"
-)
-
-const (
-	// 任务描述常量
-	taskPrompt = `请修改当前目录下的 internal/example/server_example.go 文件，
-将 "TODO: 增加鉴权逻辑" 下面的 if 语句替换为：
-if user == nil {
-    fmt.Println("Forbidden!")
-    return
-}`
 )
 
 func main() {
@@ -44,18 +38,29 @@ func main() {
 	registry.Register(tools.NewEditFileTool(workDir))
 
 	// 实例化并运行引擎
-	eng := engine.NewAgentEngine(llmProvider, registry, workDir, false)
+	eng := engine.NewAgentEngine(llmProvider, registry, workDir, true)
+	bot := slackchannel.NewBot(
+		eng,
+		os.Getenv("SLACK_BOT_TOKEN"),
+		os.Getenv("SLACK_APP_TOKEN"),
+		engine.NewTerminalReporter(os.Stdout),
+	)
 
-	// 执行任务
-	if err := eng.Run(context.Background(), taskPrompt); err != nil {
-		log.Fatalf("引擎运行崩溃: %v", err)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	log.Println("🚀 go-tiny-claw Slack Socket Mode 已启动，等待 @机器人 消息")
+	if err := bot.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		log.Fatalf("Slack Bot 运行失败: %v", err)
 	}
 }
 
 // 检查必要的环境变量
 func checkRequiredEnvVars() error {
-	if os.Getenv("ZHIPU_API_KEY") == "" {
-		return fmt.Errorf("请先导出 ZHIPU_API_KEY 环境变量")
+	for _, key := range []string{"ZHIPU_API_KEY", "SLACK_BOT_TOKEN", "SLACK_APP_TOKEN"} {
+		if os.Getenv(key) == "" {
+			return fmt.Errorf("请先导出 %s 环境变量", key)
+		}
 	}
 	return nil
 }
